@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Star, ArrowLeft, RefreshCw, LogOut, CheckCircle2, Trash2 } from 'lucide-react';
+import { db } from './firebase';
+import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 
 const ADMIN_NOME = 'MERCUREMAENDU';
 const ADMIN_APARTAMENTO = '0000';
@@ -350,18 +352,9 @@ export default function AvaliacaoHospede() {
     setCarregandoAdmin(true);
     setErroAdmin('');
     try {
-      const lista = await window.storage.list('avaliacao:', true);
-      const chaves = lista?.keys || [];
-      const itens = [];
-      for (const chave of chaves) {
-        try {
-          const resultado = await window.storage.get(chave, true);
-          if (resultado?.value) itens.push({ ...JSON.parse(resultado.value), _chave: chave });
-        } catch (_) {
-          // ignora item corrompido
-        }
-      }
-      itens.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      const q = query(collection(db, 'avaliacoes'), orderBy('timestamp', 'desc'));
+      const snap = await getDocs(q);
+      const itens = snap.docs.map((d) => ({ ...d.data(), _chave: d.id }));
       setAvaliacoes(itens);
     } catch (_) {
       setErroAdmin(t.erros.falhaCarregarAdmin);
@@ -373,7 +366,7 @@ export default function AvaliacaoHospede() {
   async function excluirAvaliacao(chave) {
     setExcluindoChave(chave);
     try {
-      await window.storage.delete(chave, true);
+      await deleteDoc(doc(db, 'avaliacoes', chave));
       setAvaliacoes((prev) => prev.filter((a) => a._chave !== chave));
     } catch (_) {
       setErroAdmin(t.erros.falhaExcluir);
@@ -404,7 +397,7 @@ export default function AvaliacaoHospede() {
       setErroInicio(t.erros.camposObrigatorios);
       return;
     }
-    if (n.toUpperCase() === ADMIN_NOME && a === ADMIN_APARTAMENTO) {
+    if (n === ADMIN_NOME && a === ADMIN_APARTAMENTO) {
       setErroInicio('');
       setTela('admin');
       carregarAvaliacoes();
@@ -443,9 +436,7 @@ export default function AvaliacaoHospede() {
         comentario: comentario.trim(),
         timestamp: Date.now(),
       };
-      const chave = `avaliacao:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const resultado = await window.storage.set(chave, JSON.stringify(registro), true);
-      if (!resultado) throw new Error('sem-resultado');
+      await addDoc(collection(db, 'avaliacoes'), registro);
       setTela('obrigado');
     } catch (_) {
       setErroPesquisa(t.erros.falhaEnvio);
@@ -696,6 +687,7 @@ export default function AvaliacaoHospede() {
           font-weight: 560;
           font-size: 19px;
           margin: 0;
+          color: var(--tinta);
         }
         .marca-admin { font-size: 12.5px; color: var(--texto-suave); margin: 3px 0 0; }
         .icone-botao {
